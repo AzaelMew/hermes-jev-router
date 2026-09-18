@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Jev model router
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.hermes/jev-router.env
+WorkingDirectory=%h/.hermes/plugins/jev-router-inline
+Environment=PYTHONPATH=%h/.hermes/plugins/jev-router-inline:%h/.hermes/plugins/model-providers/jev-router:%h/.hermes/hermes-agent
+ExecStart=%h/.hermes/hermes-agent/venv/bin/python3 -m hermes_jev_router.server
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+
+# Created by Codex GPT-6 on 2026-09-17 13:05 PDT on ombee.

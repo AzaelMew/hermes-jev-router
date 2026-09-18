@@ -1,0 +1,43 @@
+{
+  "micro": {
+    "provider": "custom",
+    "model": "your-fast-text-model",
+    "base_url": "http://127.0.0.1:1234/v1",
+    "api_key_env": "LOCAL_MODEL_API_KEY",
+    "supports_tools": true,
+    "supports_streaming": true
+  },
+  "cheap": {
+    "provider": "custom",
+    "model": "your-low-cost-text-model",
+    "base_url": "https://your-provider.example/v1",
+    "api_key_env": "YOUR_PROVIDER_API_KEY",
+    "supports_tools": true,
+    "supports_streaming": true
+  },
+  "balanced": {
+    "provider": "custom",
+    "model": "your-general-text-model",
+    "base_url": "https://your-provider.example/v1",
+    "api_key_env": "YOUR_PROVIDER_API_KEY",
+    "supports_tools": true,
+    "supports_streaming": true
+  },
+  "strong": {
+    "provider": "custom",
+    "model": "your-reasoning-text-model",
+    "base_url": "https://your-provider.example/v1",
+    "api_key_env": "YOUR_PROVIDER_API_KEY",
+    "supports_tools": true,
+    "supports_streaming": true
+  },
+  "frontier": {
+    "provider": "custom",
+    "model": "your-frontier-text-model",
+    "base_url": "https://your-provider.example/v1",
+    "api_key_env": "YOUR_PROVIDER_API_KEY",
+    "supports_tools": true,
+    "supports_streaming": true
+  },
+  "__created_by": "Codex GPT-6 on 2026-09-17 16:30 PDT on ombee"
+}
