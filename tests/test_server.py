@@ -1,8 +1,15 @@
 import unittest
+from unittest.mock import patch
 
 from hermes_jev_router.config import RouteTarget, RouterConfig
 from hermes_jev_router.decision import Decision, encode_marker, format_route_card
-from hermes_jev_router.server import clean_messages, _decision_from_messages, _requested_tier, _route_target
+from hermes_jev_router.server import (
+    _decision_from_messages,
+    _jev_decision_response,
+    _requested_tier,
+    _route_target,
+    clean_messages,
+)
 
 
 class ServerTests(unittest.TestCase):
@@ -42,6 +49,36 @@ class ServerTests(unittest.TestCase):
         _, target, error = _route_target(config, decision, False)
         self.assertIsNone(error)
         self.assertEqual(target.model, "real-model")
+
+    def test_openclaw_decision_endpoint_uses_the_host_inventory(self):
+        class StaticJev:
+            def evaluate(self, state):
+                self.state = state
+                return {
+                    "answers": {
+                        "route_tier": {"choice": "cheap", "confidence": 0.91, "probabilities": {"cheap": 0.91}},
+                        "task_shape": {"choice": "direct"},
+                        "high_stakes": {"noul": 0.0},
+                    }
+                }
+
+        body = {
+            "prompt": "What is the capital of France?",
+            "platform": "telegram",
+            "available_models": [{"provider": "openai", "model": "gpt-mini"}],
+            "route_choices": {
+                "micro": {"provider": "openai", "model": "gpt-mini"},
+                "cheap": {"provider": "openai", "model": "gpt-mini"},
+                "balanced": {"provider": "openai", "model": "gpt-balanced"},
+                "strong": {"provider": "openai", "model": "gpt-strong"},
+                "frontier": {"provider": "openai", "model": "gpt-frontier"},
+            },
+        }
+        with patch("hermes_jev_router.decision.JevClient", return_value=StaticJev()):
+            response = _jev_decision_response(body, RouterConfig(jev_api_key="test"))
+        self.assertEqual(response["inventory_count"], 1)
+        self.assertEqual(response["decision"]["target"]["model"], "gpt-mini")
+        self.assertIn("openai/gpt-mini", response["card"])
 
 
 # Created by Codex GPT-6 on 2026-09-17 11:03 PDT on ombee.

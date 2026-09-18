@@ -221,6 +221,48 @@ def _append_decision_marker(messages: list[Any], decision: Decision) -> list[Any
     return marked
 
 
+def _jev_decision_response(body: dict[str, Any], config: RouterConfig) -> dict[str, Any]:
+    """Classify a request for an external host integration such as OpenClaw.
+
+    The external host supplies its own safe model inventory and five route
+    choices.  The router only returns a Jev decision.  It never receives or
+    returns provider credentials.
+    """
+
+    prompt = body.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    available_models = body.get("available_models", [])
+    if not isinstance(available_models, list):
+        raise ValueError("available_models must be a JSON array")
+    route_choices = body.get("route_choices", {})
+    if not isinstance(route_choices, dict):
+        raise ValueError("route_choices must be a JSON object")
+    history = body.get("conversation_history", [])
+    if not isinstance(history, list):
+        history = []
+    decision = classify_request(
+        prompt,
+        history,
+        platform=str(body.get("platform", "openclaw")),
+        model=str(body.get("model", "auto")),
+        tools_present=bool(body.get("tools_present", True)),
+        config=config,
+        available_models=[item for item in available_models if isinstance(item, dict)][:128],
+        route_choices={str(key): value for key, value in route_choices.items() if isinstance(value, dict)},
+    )
+    target = decision.target if isinstance(decision.target, dict) else {}
+    provider = str(target.get("provider") or "")
+    model = str(target.get("model") or "")
+    target_name = f"{provider}/{model}" if provider and model else decision.tier.upper()
+    return {
+        "decision": decision.to_payload(),
+        "card": format_route_card(decision, target_name, platform=str(body.get("platform", "openclaw"))),
+        "inventory_count": len(available_models),
+        "route_count": len(route_choices),
+    }
+
+
 class RouterHandler(BaseHTTPRequestHandler):
     """HTTP handler. The config is stored on the server instance."""
 
@@ -337,6 +379,18 @@ code {{ color:var(--accent); }} table {{ width:100%; border-collapse:collapse; m
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
         if not self._authorized():
             self._send_json(401, {"error": {"message": "Invalid local router key", "type": "authentication_error"}})
+            return
+        if self.path == "/v1/jev/decision":
+            body = self._read_json()
+            if not body:
+                self._send_json(400, {"error": {"message": "A JSON object is required", "type": "invalid_request_error"}})
+                return
+            try:
+                self._send_json(200, _jev_decision_response(body, self.config))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+            except Exception as error:
+                self._send_json(502, {"error": {"message": f"Jev decision failed: {str(error)[:220]}", "type": "router_error"}})
             return
         if self.path != "/v1/chat/completions":
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})

@@ -1,0 +1,24 @@
+{
+  "id": "hermes-jev-router",
+  "name": "Hermes Jev Router",
+  "description": "Routes OpenClaw turns through TypeSafe Jev and the models available on this machine.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "showRouteCard": { "type": "boolean", "default": true },
+      "respectManualModel": { "type": "boolean", "default": false },
+      "allowOpenRouter": { "type": "boolean", "default": false },
+      "toolsPresent": { "type": "boolean", "default": true },
+      "endpoint": { "type": "string", "default": "http://127.0.0.1:8765/v1/jev/decision" },
+      "catalogTtlSeconds": { "type": "number", "minimum": 5, "maximum": 3600, "default": 60 },
+      "requestTimeoutMs": { "type": "number", "minimum": 1000, "maximum": 15000, "default": 6500 },
+      "openclawBin": { "type": "string" },
+      "routerApiKeyEnv": { "type": "string", "default": "JEV_ROUTER_API_KEY" }
+    }
+  }
+}

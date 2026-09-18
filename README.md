@@ -176,9 +176,9 @@ Demo mode returns a local rehearsal response. It does not call the selected answ
 
 Set `JEV_ROUTER_DEMO=0` for live downstream answers. Hermes native mode uses the provider credentials already configured in Hermes.
 
-## Standalone sidecar and OpenClaw
+## Standalone sidecar
 
-The repository also contains a small OpenAI-compatible sidecar. It is useful for the later OpenClaw adapter and for clients that cannot load a Hermes plugin.
+The repository also contains a small OpenAI-compatible sidecar. It is useful for clients that cannot load a Hermes plugin.
 
 Hermes native mode does not need the sidecar on current Hermes versions. An older Hermes version can use the sidecar as a compatibility bridge.
 
@@ -190,6 +190,60 @@ export JEV_ROUTER_ROUTES_FILE=/tmp/hermes-jev-routes.json
 ```
 
 Keep real keys in environment variables. Never put them in the route file.
+
+## OpenClaw
+
+OpenClaw has a native plugin in the `openclaw/` directory. It uses OpenClaw's `before_model_resolve` hook. OpenClaw still owns the model call, tools, credentials, and failover.
+
+The OpenClaw plugin discovers models with OpenClaw's own model list command. It uses only models that OpenClaw reports as available. It excludes OpenRouter by default. It does not use the model list from this README or from the author's machine.
+
+The plugin needs the local sidecar for the Jev decision. Start the sidecar with the same private environment that contains your Jev key:
+
+```bash
+export JEV_API_KEY=jev_your_key_here
+export JEV_ROUTER_API_KEY=local-router
+PYTHONPATH=. python3 scripts/run_router.py
+```
+
+Install the OpenClaw plugin from this repository:
+
+```bash
+openclaw plugins install --link ./openclaw --force
+openclaw plugins enable hermes-jev-router
+```
+
+Add this entry to `~/.openclaw/openclaw.json`:
+
+```json5
+{
+  plugins: {
+    entries: {
+      "hermes-jev-router": {
+        enabled: true,
+        hooks: { allowConversationAccess: true },
+        config: {
+          showRouteCard: true,
+          respectManualModel: false,
+          allowOpenRouter: false
+        }
+      }
+    }
+  }
+}
+```
+
+Then reload the plugin or restart the Gateway:
+
+```bash
+openclaw plugins reload hermes-jev-router
+openclaw plugins inspect hermes-jev-router --runtime --json
+```
+
+The plugin sends the current prompt and safe model facts to the sidecar. Jev selects one of five levels. The plugin returns that level's real `provider/model` pair to OpenClaw. The reply starts with the same route card used by Hermes and Telegram.
+
+If the sidecar or Jev is unavailable, OpenClaw keeps its normal model. The plugin does not block the conversation.
+
+To keep a manually selected model, set `respectManualModel` to `true`. With the default `false`, the plugin routes every normal OpenClaw turn. This is the automatic mode.
 
 ## Troubleshooting
 
@@ -214,10 +268,12 @@ That is expected. The plugin uses the models available in your Hermes installati
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q hermes_jev_router providers scripts
+node --test openclaw/catalog.test.mjs
+node --check openclaw/index.js
 git diff --check
 ```
 
-The tests cover five-level routing, full catalog handoff, native Hermes dispatch, streaming, provider failover, and Telegram-safe route cards.
+The tests cover five-level routing, full catalog handoff, native Hermes dispatch, streaming, provider failover, OpenClaw catalog discovery, and Telegram-safe route cards.
 
 ## Sources
 
@@ -227,9 +283,12 @@ The tests cover five-level routing, full catalog handoff, native Hermes dispatch
 - [Hermes plugins](https://hermes-agent.nousresearch.com/docs/user-guide/features/plugins)
 - [Hermes hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks)
 - [Hermes model provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
+- [OpenClaw custom providers](https://docs.openclaw.ai/concepts/model-providers/custom-providers)
+- [OpenClaw plugin hooks](https://docs.openclaw.ai/plugins/hooks)
+- [OpenClaw hook reference](https://docs.openclaw.ai/plugins/hooks/reference)
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-Created by Codex GPT-6 on 2026-09-17 21:04 PDT on ombee.
+Created by Codex GPT-6 on 2026-09-18 12:00 PDT on ombee.

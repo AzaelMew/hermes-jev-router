@@ -1,0 +1,16 @@
+{
+  "name": "hermes-jev-router",
+  "version": "0.2.0",
+  "description": "OpenClaw plugin for explainable TypeSafe Jev model routing",
+  "private": false,
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.js"],
+    "compat": {
+      "pluginApi": "2026.8.1"
+    },
+    "build": {
+      "openclawVersion": "2026.8.1"
+    }
+  }
+}
