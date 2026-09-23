@@ -34,6 +34,7 @@ class AvailableModel:
     supports_tools: bool = True
     supports_streaming: bool = True
     reasoning: bool = True
+    reasoning_effort: str | None = None
     context_window: int = 0
     cost_input: float | None = None
     cost_output: float | None = None
@@ -75,6 +76,7 @@ class AvailableModel:
             "model": self.model,
             "base_url": self.base_url,
             "api_mode": self.api_mode,
+            "reasoning_effort": self.reasoning_effort,
             "supports_tools": self.supports_tools,
             "supports_streaming": self.supports_streaming,
         }

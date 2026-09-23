@@ -95,6 +95,8 @@ def _target(payload: dict[str, Any] | None) -> dict[str, Any]:
         "model": model,
         "base_url": base_url,
         "api_mode": api_mode,
+        "reasoning_effort": target.get("reasoning_effort"),
+        "fallback": target.get("fallback") if isinstance(target.get("fallback"), dict) else {},
         "supports_tools": bool(target.get("supports_tools", True)),
         "supports_streaming": bool(target.get("supports_streaming", True)),
     }
@@ -102,48 +104,20 @@ def _target(payload: dict[str, Any] | None) -> dict[str, Any]:
 
 def _route_card(payload: dict[str, Any], target: dict[str, Any]) -> str:
     tier = str(payload.get("tier") or "balanced").upper()
-    confidence_value = payload.get("confidence")
-    try:
-        confidence = "fallback" if payload.get("source") == "fallback" else f"{float(confidence_value):.0%}"
-    except (TypeError, ValueError):
-        confidence = "fallback"
-    probabilities = payload.get("probabilities")
-    if isinstance(probabilities, dict):
-        parsed_signals = []
-        for key, value in probabilities.items():
-            try:
-                parsed_signals.append((str(key), float(value)))
-            except (TypeError, ValueError):
-                continue
-        signals = [
-            (tier, dict(parsed_signals)[tier])
-            for tier in ("micro", "cheap", "balanced", "strong", "frontier")
-            if tier in dict(parsed_signals)
-        ] or sorted(parsed_signals, key=lambda item: item[1], reverse=True)[:3]
-        signal_text = " · ".join(f"{key} {value:.0%}" for key, value in signals)
-    else:
-        signal_text = "no probability data"
+    effort = target.get("reasoning_effort") or {
+        "micro": "minimal", "cheap": "low", "balanced": "medium",
+        "strong": "high", "frontier": "xhigh",
+    }.get(str(payload.get("tier") or "balanced").lower())
+    model = str(target.get("model") or "")
+    provider = str(target.get("provider") or "")
+    display_model = model.removeprefix("gpt-") if provider == "openai-codex" else model
+    label = f"⚡ Jev · {tier} · {display_model}"
+    if effort:
+        label += f" · {effort}"
     reasons = payload.get("reasons")
-    reason = str(reasons[0]) if isinstance(reasons, list) and reasons else "Jev evaluated the request"
-    if len(reason) > 92:
-        reason = reason[:89] + "..."
-    lines = [
-        CARD_START,
-        f"│ Path: {tier}  ·  confidence {confidence}",
-        f"│ Model: {target['provider']}/{target['model']}",
-        f"│ Why: {reason}",
-        f"│ Jev signal: {signal_text or 'no probability data'}",
-    ]
-    if payload.get("task_shape"):
-        lines.append(f"│ Task shape: {payload['task_shape']}")
-    if payload.get("promoted"):
-        lines.append("│ Guardrail: route was promoted for safety or uncertainty")
-    provenance = str(payload.get("jev_model") or "not available")
-    latency = payload.get("latency_ms")
-    suffix = f" · {latency} ms" if isinstance(latency, int) else ""
-    lines.append(f"│ Jev: {provenance}{suffix}")
-    lines.append(CARD_END)
-    return "\n".join(lines)
+    if isinstance(reasons, list) and reasons and "fallback" in str(reasons[0]).lower():
+        label += " · fallback"
+    return label
 
 
 def _openai_client(runtime: dict[str, Any], client_kwargs: dict[str, Any]) -> Any:
@@ -289,6 +263,24 @@ class JevRouterClient:
         payload = _decision_payload(messages)
         target = _target(payload)
         candidates = [(target, payload or {})]
+        fallback = target.get("fallback") or {}
+        if fallback.get("provider") and fallback.get("model") and fallback.get("base_url"):
+            fallback_target = _target({
+                "target": {
+                    **fallback,
+                    "reasoning_effort": fallback.get("reasoning_effort") or target.get("reasoning_effort"),
+                    "api_mode": fallback.get("api_mode") or target["api_mode"],
+                    "supports_tools": target["supports_tools"],
+                    "supports_streaming": target["supports_streaming"],
+                }
+            })
+            fallback_payload = dict(payload or {})
+            fallback_payload["tier"] = payload.get("tier", "balanced") if payload else "balanced"
+            fallback_payload["reasons"] = [
+                f"Primary unavailable; using configured fallback {fallback_target['provider']}/{fallback_target['model']}"
+            ]
+            fallback_payload["promoted"] = True
+            candidates.append((fallback_target, fallback_payload))
         for raw in (payload or {}).get("alternates", []):
             if not isinstance(raw, dict):
                 continue
@@ -334,6 +326,22 @@ class JevRouterClient:
         request = dict(kwargs)
         request["messages"] = _clean_messages(messages)
         request["model"] = target["model"]
+        effort = target.get("reasoning_effort") or {
+            "micro": "minimal", "cheap": "low", "balanced": "medium",
+            "strong": "high", "frontier": "xhigh",
+        }.get(str(payload.get("tier") or "balanced").lower())
+        extra_body = request.get("extra_body")
+        existing_reasoning = extra_body.get("reasoning") if isinstance(extra_body, dict) else None
+        if effort:
+            if target["api_mode"] == "codex_responses":
+                request["extra_body"] = {
+                    **(extra_body if isinstance(extra_body, dict) else {}),
+                    "reasoning": {**(existing_reasoning if isinstance(existing_reasoning, dict) else {}), "effort": effort, "enabled": effort != "none"},
+                }
+            elif target["api_mode"] == "anthropic_messages":
+                request["_reasoning_config"] = {"effort": effort, "enabled": effort != "none"}
+            else:
+                request["reasoning_effort"] = effort
         card = _route_card(payload, target)
         stream = bool(request.get("stream"))
         if stream and target["api_mode"] == "chat_completions" and target["supports_streaming"]:

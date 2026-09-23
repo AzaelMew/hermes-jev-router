@@ -83,7 +83,7 @@ class ProviderClientTests(unittest.TestCase):
             response = client.chat.completions.create(model="auto", messages=messages)
         self.assertEqual(fake.requests[0]["model"], "real-model")
         self.assertNotIn("JEV_ROUTER_DECISION", fake.requests[0]["messages"][0]["content"])
-        self.assertIn("Jev model routing", response.choices[0].message.content)
+        self.assertIn("⚡ Jev · STRONG", response.choices[0].message.content)
         self.assertIn("real answer", response.choices[0].message.content)
 
     def test_native_client_emits_a_complete_stream_with_route_card(self):
@@ -104,7 +104,7 @@ class ProviderClientTests(unittest.TestCase):
                 model="auto", stream=True, messages=[{"role": "user", "content": marker()}]
             ))
         self.assertGreaterEqual(len(chunks), 3)
-        self.assertIn("Jev model routing", chunks[0].choices[0].delta.content)
+        self.assertIn("⚡ Jev · STRONG", chunks[0].choices[0].delta.content)
         self.assertEqual(chunks[-1].choices[0].finish_reason, "stop")
 
     def test_invalid_target_fails_closed(self):
@@ -150,7 +150,7 @@ class ProviderClientTests(unittest.TestCase):
                 messages=[{"role": "user", "content": marker(alternates=[alternate])}],
             )
         self.assertEqual(second_fake.requests[0]["model"], "backup-model")
-        self.assertIn("used backup/backup-model fallback", response.choices[0].message.content)
+        self.assertIn("⚡ Jev · BALANCED · backup-model · medium · fallback", response.choices[0].message.content)
 
 
 # Created by Codex GPT-6 on 2026-09-17 16:22 PDT on ombee.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .catalog import route_choices_for_hermes
-from .config import TIERS, load_config
+from .config import DEFAULT_REASONING_EFFORT, TIERS, load_config
 from .decision import classify_request, encode_marker, format_route_card
 
 
@@ -25,6 +25,8 @@ def _route_choices() -> tuple[list | None, dict]:
                 "model": target.model,
                 "base_url": target.base_url,
                 "api_mode": target.api_mode,
+                "reasoning_effort": target.reasoning_effort or DEFAULT_REASONING_EFFORT[tier],
+                "fallback": dict(target.fallback),
                 "supports_tools": target.supports_tools,
                 "supports_streaming": target.supports_streaming,
             }

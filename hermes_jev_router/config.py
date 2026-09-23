@@ -16,6 +16,15 @@ from typing import Any
 TIERS = ("micro", "cheap", "balanced", "strong", "frontier")
 
 
+DEFAULT_REASONING_EFFORT = {
+    "micro": "minimal",
+    "cheap": "low",
+    "balanced": "medium",
+    "strong": "high",
+    "frontier": "xhigh",
+}
+
+
 @dataclass(frozen=True)
 class RouteTarget:
     """One selectable downstream model."""
@@ -28,6 +37,8 @@ class RouteTarget:
     api_mode: str = "chat_completions"
     supports_tools: bool = True
     supports_streaming: bool = True
+    reasoning_effort: str | None = None
+    fallback: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -41,6 +52,15 @@ class RouteTarget:
         headers = value.get("headers", {})
         if not isinstance(headers, dict):
             raise ValueError(f"Route {tier!r} headers must be an object")
+        effort = str(value.get("reasoning_effort", "")).strip().lower() or None
+        if effort not in {None, "none", "minimal", "low", "medium", "high", "xhigh"}:
+            raise ValueError(f"Route {tier!r} has invalid reasoning_effort: {effort}")
+        fallback = value.get("fallback", {})
+        if not isinstance(fallback, dict):
+            raise ValueError(f"Route {tier!r} fallback must be an object")
+        fallback_effort = str(fallback.get("reasoning_effort", "")).strip().lower() or None
+        if fallback_effort not in {None, "none", "minimal", "low", "medium", "high", "xhigh"}:
+            raise ValueError(f"Route {tier!r} has invalid fallback reasoning_effort: {fallback_effort}")
         return cls(
             tier=tier,
             model=model,
@@ -50,6 +70,8 @@ class RouteTarget:
             api_mode=str(value.get("api_mode", "chat_completions")).strip() or "chat_completions",
             supports_tools=_bool_value(value.get("supports_tools", True), True),
             supports_streaming=_bool_value(value.get("supports_streaming", True), True),
+            reasoning_effort=effort,
+            fallback={**fallback, **({"reasoning_effort": fallback_effort} if fallback_effort else {})},
             headers={str(k): str(v) for k, v in headers.items()},
         )
 
@@ -157,6 +179,7 @@ def load_config() -> RouterConfig:
                     api_mode=source.api_mode,
                     supports_tools=source.supports_tools,
                     supports_streaming=source.supports_streaming,
+                    reasoning_effort=source.reasoning_effort,
                     headers=dict(source.headers),
                 )
     routes = {tier: routes[tier] for tier in TIERS if tier in routes}
