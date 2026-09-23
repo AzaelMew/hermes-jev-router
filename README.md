@@ -4,18 +4,13 @@ Choose the right AI model for each request.
 
 This plugin adds automatic model routing to [Hermes Agent](https://hermes-agent.nousresearch.com/). It uses [TypeSafe Jev](https://docs.typesafe.ai/) to judge the size and difficulty of each request. Hermes then sends the request to a suitable model.
 
-The plugin is designed for people who use Hermes in a terminal or through Telegram. A small route card appears before each answer:
+The plugin is designed for people who use Hermes in a terminal or through Telegram. It adds a compact route label before each answer:
 
 ```text
-╭─ ⚡ Jev model routing ─╮
-│ Path: BALANCED · capable · confidence 92%
-│ Model: your-hermes-provider/your-model
-│ Why: Jev selected balanced for an explanation request
-│ Jev signal: micro 1% · cheap 18% · balanced 77% · strong 4% · frontier 0%
-│ Task shape: explanation
-│ Jev: jev-1.13.0 · 310 ms
-╰────────────────────────╯
+⚡ Jev · BALANCED · 6-luna · medium
 ```
+
+When a route uses a backup model, the label ends with `· fallback`.
 
 ## The important part: models are chosen on each machine
 
@@ -35,7 +30,31 @@ The plugin then gives the complete discovered catalog to Jev. Jev chooses one of
 
 The plugin maps the local catalog to five real Hermes targets. It does this at runtime. A different machine can produce a different five-model set. The examples in this README are placeholders. They are not required models.
 
-If a selected target rejects a request because of authentication, quota, or model availability, the router tries another discovered Hermes target. The route card explains the fallback.
+You can pin tier models and reasoning effort in `~/.hermes/jev-routes.json`. The five tiers default to `minimal`, `low`, `medium`, `high`, and `xhigh` reasoning effort respectively. Providers may map these settings differently or reject unsupported values.
+
+A route can also declare a `fallback` target. The router tries it after a failoverable primary error (for example, an authentication, quota, or unavailable-model error) and before trying another tier's route:
+
+```json
+{
+  "cheap": {
+    "provider": "kimi-coding",
+    "model": "kimi-for-coding",
+    "base_url": "https://api.kimi.com/coding",
+    "api_mode": "anthropic_messages",
+    "fallback": {
+      "provider": "openai-codex",
+      "model": "gpt-6-luna",
+      "base_url": "https://chatgpt.com/backend-api/codex",
+      "api_mode": "codex_responses",
+      "reasoning_effort": "low"
+    }
+  }
+}
+```
+
+Routes are read per request, so changes to `jev-routes.json` take effect without restarting Hermes. Restart Hermes after installing or changing plugin code so it loads the updated plugin.
+
+If a selected target rejects a request because of authentication, quota, or model availability, the router tries the configured fallback (if any), then another discovered Hermes target. The compact route label identifies when a fallback was used.
 
 Hermes can list a model without proving that the provider will accept every live request. The router keeps the turn alive when that happens.
 
@@ -102,7 +121,7 @@ plugins:
 
 The `auto` model activates routing. Selecting a normal Hermes model by hand still uses that model directly.
 
-Restart Hermes after you change the configuration.
+Restart Hermes after changing the provider/plugin configuration so it loads the updated settings. Changes to `~/.hermes/jev-routes.json` are read per request and do not require a restart.
 
 ### 6. Check the installation
 
@@ -131,7 +150,7 @@ The route can vary. Jev may promote a request when it is uncertain or when the r
 
 No separate Telegram bot is required. Hermes uses its normal Telegram gateway.
 
-Send the same prompts from an allowed Telegram account. The route card appears before the answer. It uses plain text so Telegram does not misread Markdown. It also works with streaming and non-streaming Hermes turns.
+Send the same prompts from an allowed Telegram account. The compact Jev route label appears before the answer as plain text, so Telegram does not misread it as Markdown. It also works with streaming and non-streaming Hermes turns.
 
 ## How the choice is made
 
@@ -144,7 +163,7 @@ For each routed turn:
 5. The plugin maps that level to one real model from the current Hermes catalog.
 6. Hermes sends the clean request to that model.
 
-The route card shows the level, model, Jev probabilities, task shape, confidence, and reason. It also shows when a safety rule promoted the route or when a fallback was needed.
+The compact route label shows the tier, selected model, and reasoning effort. It marks configured or cross-tier failover with `· fallback`.
 
 ## Credentials and privacy
 
@@ -239,7 +258,7 @@ openclaw plugins reload hermes-jev-router
 openclaw plugins inspect hermes-jev-router --runtime --json
 ```
 
-The plugin sends the current prompt and safe model facts to the sidecar. Jev selects one of five levels. The plugin returns that level's real `provider/model` pair to OpenClaw. The reply starts with the same route card used by Hermes and Telegram.
+The plugin sends the current prompt and safe model facts to the sidecar. Jev selects one of five levels. The plugin returns that level's real `provider/model` pair to OpenClaw. The reply starts with the compact Jev route label used by Hermes and Telegram.
 
 If the sidecar or Jev is unavailable, OpenClaw keeps its normal model. The plugin does not block the conversation.
 
@@ -257,7 +276,7 @@ The router uses the configured `balanced` default and says so in the card. Check
 
 ### A model fails after Jev selects it
 
-The router tries another discovered Hermes target for authentication, quota, and unsupported-model errors. Check the provider's Hermes authentication if this repeats.
+The router tries a configured per-tier fallback first, when one exists, then another discovered Hermes target for authentication, quota, and unsupported-model errors. Check the provider's Hermes authentication if this repeats. The compact label adds `· fallback` when a backup target handled the request.
 
 ### The available models differ from this README
 
