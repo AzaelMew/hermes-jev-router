@@ -4,7 +4,7 @@ Choose the right AI model for each request.
 
 This plugin adds automatic model routing to [Hermes Agent](https://hermes-agent.nousresearch.com/). It uses [TypeSafe Jev](https://docs.typesafe.ai/) to judge the size and difficulty of each request. Hermes then sends the request to a suitable model.
 
-The plugin is designed for people who use Hermes in a terminal or through Telegram. It adds a compact route label before each answer:
+The Jev router works across Hermes interfaces, including the app, terminal, Telegram, and Discord. It adds a compact route label before each answer:
 
 ```text
 ⚡ Jev · BALANCED · 6-luna · medium
