@@ -14,11 +14,7 @@ When a route uses a backup model, the label ends with `· fallback`.
 
 ## The important part: models are chosen on each machine
 
-You do not give this plugin a fixed list of models.
-
-When Hermes starts a routed turn, the plugin asks Hermes what providers and models are available on that machine. It uses Hermes' own credentials, model list, transport settings, prices, context limits, and tool support. It removes models that are not text models.
-
-The plugin then gives the complete discovered catalog to Jev. Jev chooses one of five capability levels:
+By default, the native plugin discovers up to 128 models that Hermes can resolve locally and maps them to five tiers. Explicit route configuration supplied through `JEV_ROUTER_ROUTES_FILE` or `JEV_ROUTER_ROUTES_JSON` overrides discovery. Catalog discovery does not prove a provider will accept a live request.
 
 | Level | Use it for |
 | --- | --- |
@@ -30,9 +26,9 @@ The plugin then gives the complete discovered catalog to Jev. Jev chooses one of
 
 The plugin maps the local catalog to five real Hermes targets. It does this at runtime. A different machine can produce a different five-model set. The examples in this README are placeholders. They are not required models.
 
-You can pin tier models and reasoning effort in `~/.hermes/jev-routes.json`. The five tiers default to `minimal`, `low`, `medium`, `high`, and `xhigh` reasoning effort respectively. Providers may map these settings differently or reject unsupported values.
+You can pin tier models and reasoning effort in a route file referenced by `JEV_ROUTER_ROUTES_FILE`, or provide routes inline with `JEV_ROUTER_ROUTES_JSON`. The native plugin does not automatically read `~/.hermes/jev-routes.json` unless you point `JEV_ROUTER_ROUTES_FILE` to it. The five tiers default to `minimal`, `low`, `medium`, `high`, and `xhigh` reasoning effort respectively. Providers may map these settings differently or reject unsupported values.
 
-A route can also declare a `fallback` target. The router tries it after a failoverable primary error (for example, an authentication, quota, or unavailable-model error) and before trying another tier's route:
+A route can also declare a `fallback` target. In native Hermes mode, the router tries it after a failoverable primary error (for example, an authentication, quota, or unavailable-model error) and before trying another tier's route:
 
 ```json
 {
@@ -54,9 +50,7 @@ A route can also declare a `fallback` target. The router tries it after a failov
 
 Routes are read per request, so changes to `jev-routes.json` take effect without restarting Hermes. Restart Hermes after installing or changing plugin code so it loads the updated plugin.
 
-If a selected target rejects a request because of authentication, quota, or model availability, the router tries the configured fallback (if any), then another discovered Hermes target. The compact route label identifies when a fallback was used.
-
-Hermes can list a model without proving that the provider will accept every live request. The router keeps the turn alive when that happens.
+For native Hermes dispatch, recognized authentication, quota, guardrail, and unavailable-model errors trigger a configured per-tier fallback and then the decision's alternate targets, when present. Other errors or exhausted routes fail the request. The standalone sidecar's HTTP-forwarding path does not provide this same downstream failover.
 
 ## What you need
 
@@ -64,10 +58,11 @@ You need:
 
 - Hermes Agent installed and working.
 - At least one model provider authenticated in Hermes.
-- A TypeSafe Jev API key.
+- A Jev decision credential: `JEV_API_KEY`/`TYPESAFE_API_KEY`, or `OPENROUTER_API_KEY` for the compatible Decisions endpoint.
+- For native Hermes provider admission, a non-empty `JEV_ROUTER_API_KEY` setting (the placeholder value is not used as an upstream credential).
 - Python 3.10 or newer.
 
-You do not need OpenRouter. OpenRouter is not a default or hidden route.
+You do not need OpenRouter. It is only used if you choose it for Jev decisions or explicitly opt in to OpenRouter answer models.
 
 ## Setup
 
@@ -90,19 +85,21 @@ Do not copy a model list from this repository. Do not copy another user's provid
 python3 scripts/install_hermes.py
 ```
 
-The installer copies plugin code and manifests into `~/.hermes/plugins/`. It does not copy environment files or credentials.
+The installer copies plugin code and manifests into `~/.hermes/plugins/`. It installs both the native Hermes hook and the model-provider adapter; it does not copy environment files or credentials.
 
-### 4. Add the Jev key
+### 4. Add a Jev decision key
 
-Put your TypeSafe key in the environment that starts Hermes:
+For direct TypeSafe decisions, set `JEV_API_KEY` or `TYPESAFE_API_KEY`. Alternatively, set `OPENROUTER_API_KEY` to use OpenRouter's compatible Decisions endpoint. These keys are for Jev's routing decision, not the downstream answer model.
 
 ```bash
 JEV_API_KEY=jev_your_key_here
+# Or, instead:
+# OPENROUTER_API_KEY=your_openrouter_key
 ```
 
-You can place this line in the private Hermes environment file used by your installation. Never put the real key in this repository.
+Store the key in the private environment used to start Hermes; do not commit it. Get a TypeSafe key from the [TypeSafe console](https://console.typesafe.ai/).
 
-Get a key from the [TypeSafe console](https://console.typesafe.ai/).
+For native Hermes model-provider admission, also set `JEV_ROUTER_API_KEY` to any non-empty placeholder, for example `local-router`. The provider requires this setting to be present; the value is not used to authenticate downstream model calls. For native Hermes model discovery, OpenRouter answer models require `JEV_ROUTER_ALLOW_OPENROUTER=1`; explicitly pinned OpenRouter route targets are a separate opt-in through the route configuration itself.
 
 ### 5. Enable automatic routing
 
@@ -112,14 +109,14 @@ Add or update the Hermes configuration:
 model:
   provider: jev-router
   default: auto
-  base_url: http://127.0.0.1:8765/v1
+  base_url: http://127.0.0.1:8765/v1 # virtual provider URL; native mode does not require a local server
 
 plugins:
   enabled:
     - jev-router-inline
 ```
 
-The `auto` model activates routing. Selecting a normal Hermes model by hand still uses that model directly.
+The `auto` model activates routing. Manual model selection bypasses the hook when you switch away from the `jev-router` provider; selecting a different model name while that provider remains active does not disable routing. Native Hermes mode dispatches through the installed provider adapter and does **not** require the sidecar process.
 
 Restart Hermes after changing the provider/plugin configuration so it loads the updated settings. Changes to `~/.hermes/jev-routes.json` are read per request and do not require a restart.
 
@@ -130,7 +127,7 @@ hermes plugins doctor ~/.hermes/plugins/jev-router-inline --ci
 hermes -z "What is the capital of France? Reply with only the city name."
 ```
 
-You must see the Jev route card before the answer.
+A successful routed answer should begin with the compact Jev label. Plugin doctor checks that the hook is registered; it does not prove a live Jev decision or downstream model call.
 
 ## Try the five levels
 
@@ -158,7 +155,7 @@ For each routed turn:
 
 1. Hermes reports its available model catalog.
 2. The plugin removes router providers and non-text models.
-3. The plugin sends the complete model summaries to Jev. It does not send credentials.
+3. The plugin sends Jev the discovered model summaries (up to 128), without credentials.
 4. Jev classifies the request into one of five levels.
 5. The plugin maps that level to one real model from the current Hermes catalog.
 6. Hermes sends the clean request to that model.
@@ -167,7 +164,7 @@ The compact route label shows the tier, selected model, and reasoning effort. It
 
 ## Credentials and privacy
 
-Jev receives the current request and a short recent-conversation summary. Do not route private data to TypeSafe unless your policy allows it.
+Jev receives the current request and a short recent-conversation summary. Depending on configuration, the decision is sent to TypeSafe or OpenRouter; do not route private data to either service unless your policy allows it.
 
 Jev does not receive provider keys. Hermes keeps provider authentication and sends the final request to the selected model.
 
@@ -187,13 +184,15 @@ PYTHONPATH=. python3 scripts/run_router.py
 The local service listens on `http://127.0.0.1:8765`.
 
 ```bash
-curl http://127.0.0.1:8765/health
-curl http://127.0.0.1:8765/v1/models
+curl -H 'Authorization: Bearer local-router' http://127.0.0.1:8765/health
+curl -H 'Authorization: Bearer local-router' http://127.0.0.1:8765/v1/models
 ```
 
-Demo mode returns a local rehearsal response. It does not call the selected answer model.
+Demo mode returns a local rehearsal response. It does not call the selected answer model. If `JEV_ROUTER_API_KEY` is set, requests to these endpoints must include it as a bearer token, as shown above.
 
-Set `JEV_ROUTER_DEMO=0` for live downstream answers. Hermes native mode uses the provider credentials already configured in Hermes.
+For live standalone sidecar answers, set `JEV_ROUTER_DEMO=0` **and** configure real route targets with reachable endpoints and any required downstream credentials. Turning demo mode off while routes still use the default `demo://` targets will not make live model calls.
+
+Hermes native mode uses provider credentials already configured in Hermes and does not need this sidecar.
 
 ## Standalone sidecar
 
@@ -201,20 +200,15 @@ The repository also contains a small OpenAI-compatible sidecar. It is useful for
 
 Hermes native mode does not need the sidecar on current Hermes versions. An older Hermes version can use the sidecar as a compatibility bridge.
 
-The example route file is only for the standalone sidecar or OpenClaw. It is not the Hermes model catalog:
+The example route file is for standalone sidecar completion requests. It is not an OpenClaw route file: the OpenClaw plugin builds routes from OpenClaw's model catalog and sends those choices to the sidecar's decision endpoint.
 
-```bash
-cp config/routes.example.json /tmp/hermes-jev-routes.json
-export JEV_ROUTER_ROUTES_FILE=/tmp/hermes-jev-routes.json
-```
-
-Keep real keys in environment variables. Never put them in the route file.
+For standalone live answers, set `JEV_ROUTER_ROUTES_FILE` to a route file containing real endpoints and configure the corresponding credentials. Keep real keys in environment variables; never put them in the route file.
 
 ## OpenClaw
 
 OpenClaw has a native plugin in the `openclaw/` directory. It uses OpenClaw's `before_model_resolve` hook. OpenClaw still owns the model call, tools, credentials, and failover.
 
-The OpenClaw plugin discovers models with OpenClaw's own model list command. It uses only models that OpenClaw reports as available. It excludes OpenRouter by default. It does not use the model list from this README or from the author's machine.
+The OpenClaw plugin prefers text models reported by `openclaw models list --json`. If that command fails or returns no usable models, it falls back to model references in OpenClaw's config; those references are not live-availability checks. OpenRouter answer models are excluded by default and can be enabled with the plugin's `allowOpenRouter` option.
 
 The plugin needs the local sidecar for the Jev decision. Start the sidecar with the same private environment that contains your Jev key:
 
@@ -251,28 +245,27 @@ Add this entry to `~/.openclaw/openclaw.json`:
 }
 ```
 
-Then reload the plugin or restart the Gateway:
+Restart the OpenClaw Gateway, then inspect the plugin runtime status:
 
 ```bash
-openclaw plugins reload hermes-jev-router
 openclaw plugins inspect hermes-jev-router --runtime --json
 ```
 
-The plugin sends the current prompt and safe model facts to the sidecar. Jev selects one of five levels. The plugin returns that level's real `provider/model` pair to OpenClaw. The reply starts with the compact Jev route label used by Hermes and Telegram.
+The plugin sends the current prompt and safe model facts to the sidecar. Jev selects one of five levels. The plugin returns that level's real `provider/model` pair to OpenClaw. If `showRouteCard` is enabled, its outgoing message is prefixed with a multiline Jev decision card (not the compact native Hermes label).
 
-If the sidecar or Jev is unavailable, OpenClaw keeps its normal model. The plugin does not block the conversation.
+If Jev returns no valid target, the hook leaves OpenClaw's normal model unchanged. Sidecar or network errors are not explicitly caught in the hook, so handling depends on OpenClaw's hook runner; this plugin does not guarantee the conversation continues unchanged after those errors.
 
 To keep a manually selected model, set `respectManualModel` to `true`. With the default `false`, the plugin routes every normal OpenClaw turn. This is the automatic mode.
 
 ## Troubleshooting
 
-### I do not see the route card
+### I do not see a route label
 
-Check that Hermes uses `provider: jev-router` and `default: auto`. Check that `jev-router-inline` is enabled. Then restart Hermes.
+Confirm the router provider is active, the `jev-router-inline` plugin is enabled, and `JEV_ROUTER_API_KEY` is set for provider admission. Run the plugin doctor to check hook registration, then test with `hermes -z`. Doctor does not verify a live Jev decision or model call; check the key, network, and provider errors if the routed call fails.
 
 ### Jev is unavailable
 
-The router uses the configured `balanced` default and says so in the card. Check `JEV_API_KEY` and network access.
+When Jev cannot make a decision, the router uses the configured `balanced` default. Check `JEV_API_KEY` (or `TYPESAFE_API_KEY`/`OPENROUTER_API_KEY`) and network access if this happens repeatedly.
 
 ### A model fails after Jev selects it
 
@@ -285,14 +278,14 @@ That is expected. The plugin uses the models available in your Hermes installati
 ## Tests for maintainers
 
 ```bash
-python3 -m unittest discover -s tests -v
+HERMES_HOME="$(mktemp -d)" python3 -m unittest discover -s tests -v
 python3 -m compileall -q hermes_jev_router providers scripts
 node --test openclaw/catalog.test.mjs
 node --check openclaw/index.js
 git diff --check
 ```
 
-The tests cover five-level routing, full catalog handoff, native Hermes dispatch, streaming, provider failover, OpenClaw catalog discovery, and Telegram-safe route cards.
+The unit tests cover tier decisions, marker handling and mocked native dispatch/failover, sidecar request paths, and OpenClaw catalog parsing. They do not prove live provider responses, Telegram/Discord delivery, or end-to-end OpenClaw hook behavior.
 
 ## Sources
 
