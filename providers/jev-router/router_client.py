@@ -18,7 +18,7 @@ from typing import Any, Iterable, Iterator
 MARKER_RE = re.compile(r"\[JEV_ROUTER_DECISION_V1\](.*?)\[/JEV_ROUTER_DECISION_V1\]", re.DOTALL)
 CARD_START = "╭─ ⚡ Jev model routing ─╮"
 CARD_END = "╰────────────────────────╯"
-ROUTER_PROVIDERS = {"jev-router", "jev", "auto-router", "openrouter"}
+ROUTER_PROVIDERS = {"jev-router", "jev", "auto-router"}
 ALLOWED_MODES = {"chat_completions", "codex_responses", "anthropic_messages"}
 
 
@@ -206,9 +206,10 @@ def _close(client: Any) -> None:
 def _should_failover(error: Exception) -> bool:
     text = str(error).lower()
     return any(token in text for token in (
-        "401", "402", "403", "authentication_error", "api key is invalid",
+        "401", "402", "403", "404", "authentication_error", "api key is invalid",
         "model_not_available", "model_not_supported", "model is not supported",
         "model not found", "unknown model", "insufficient credit", "quota",
+        "guardrail", "data policy",
     ))
 
 

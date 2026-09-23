@@ -60,6 +60,7 @@ class RouterConfig:
 
     jev_api_key: str | None
     jev_model: str = "jev-latest"
+    jev_provider: str = "typesafe"
     jev_timeout: float = 4.0
     jev_retries: int = 2
     min_confidence: float = 0.45
@@ -163,9 +164,25 @@ def load_config() -> RouterConfig:
     if default_tier not in TIERS:
         default_tier = "balanced"
     min_confidence = max(0.0, min(1.0, _float_env("JEV_ROUTER_MIN_CONFIDENCE", 0.45)))
+    explicit_provider = os.getenv("JEV_ROUTER_JEV_PROVIDER", "").strip().lower()
+    if explicit_provider in {"typesafe", "openrouter"}:
+        jev_provider = explicit_provider
+    elif os.getenv("JEV_API_KEY") or os.getenv("TYPESAFE_API_KEY"):
+        jev_provider = "typesafe"
+    elif os.getenv("OPENROUTER_API_KEY"):
+        jev_provider = "openrouter"
+    else:
+        jev_provider = "typesafe"
+    if jev_provider == "openrouter":
+        jev_api_key = os.getenv("OPENROUTER_API_KEY")
+        default_model = "~typesafe/jev-latest"
+    else:
+        jev_api_key = os.getenv("JEV_API_KEY") or os.getenv("TYPESAFE_API_KEY")
+        default_model = "jev-latest"
     return RouterConfig(
-        jev_api_key=os.getenv("JEV_API_KEY") or os.getenv("TYPESAFE_API_KEY"),
-        jev_model=os.getenv("JEV_ROUTER_JEV_MODEL", "jev-latest").strip() or "jev-latest",
+        jev_api_key=jev_api_key,
+        jev_model=os.getenv("JEV_ROUTER_JEV_MODEL", "").strip() or default_model,
+        jev_provider=jev_provider,
         jev_timeout=max(0.5, _float_env("JEV_ROUTER_JEV_TIMEOUT", 4.0)),
         jev_retries=max(0, min(4, _int_env("JEV_ROUTER_JEV_RETRIES", 2))),
         min_confidence=min_confidence,

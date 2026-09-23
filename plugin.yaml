@@ -5,11 +5,9 @@ author: Jethro Jones
 license: MIT
 homepage: https://github.com/jethrojones/hermes-jev-router
 tags: [routing, models, telegram, typesafe, jev]
-requires_env:
-  - name: JEV_API_KEY
-    description: TypeSafe API key used for Jev routing decisions
-    url: https://console.typesafe.ai
-    secret: true
+requires_env: []
+# One of JEV_API_KEY, TYPESAFE_API_KEY, or OPENROUTER_API_KEY must be set.
+# OPENROUTER_API_KEY routes decisions through OpenRouter's Decisions endpoint.
 provides_hooks:
   - pre_llm_call
 provides_commands:

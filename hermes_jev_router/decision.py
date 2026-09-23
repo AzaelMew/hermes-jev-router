@@ -161,17 +161,26 @@ class JevError(RuntimeError):
     """The Jev request failed or returned an invalid response."""
 
 
-class JevClient:
-    """Small standard-library client for TypeSafe's documented HTTP API."""
+TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+OPENROUTER_ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 
-    endpoint = "https://api.typesafe.ai/v1/systemone"
+
+class JevClient:
+    """Small standard-library client for the Jev decision API.
+
+    Talks to TypeSafe's documented HTTP API by default, or OpenRouter's
+    compatible Decisions endpoint when configured with an OpenRouter key.
+    """
 
     def __init__(self, config: RouterConfig):
         self.config = config
+        self.endpoint = (
+            OPENROUTER_ENDPOINT if config.jev_provider == "openrouter" else TYPESAFE_ENDPOINT
+        )
 
     def evaluate(self, state: dict[str, Any]) -> dict[str, Any]:
         if not self.config.jev_api_key:
-            raise JevError("JEV_API_KEY is not configured")
+            raise JevError("No Jev key configured (set JEV_API_KEY, TYPESAFE_API_KEY, or OPENROUTER_API_KEY)")
         body = json.dumps(
             {"state": state, "model": self.config.jev_model, "questions": ROUTER_QUESTIONS},
             separators=(",", ":"),
