@@ -74,7 +74,7 @@ You do not need OpenRouter. OpenRouter is not a default or hidden route.
 ### 1. Download the plugin
 
 ```bash
-git clone https://github.com/jethrojones/hermes-jev-router.git
+git clone https://github.com/AzaelMew/hermes-jev-router.git
 cd hermes-jev-router
 ```
 
