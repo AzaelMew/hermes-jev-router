@@ -67,6 +67,32 @@ class ProviderClientTests(unittest.TestCase):
         self.assertTrue(router_client._should_failover(RuntimeError("HTTP 429: Rate limit reached, retry later")))
         self.assertFalse(router_client._should_failover(RuntimeError("HTTP 400: invalid prompt")))
 
+    def test_empty_response_does_not_turn_route_label_into_assistant_content(self):
+        message = SimpleNamespace(role="assistant", content=None, tool_calls=[{"id": "call-1"}])
+        response = SimpleNamespace(choices=[SimpleNamespace(message=message)])
+        result = router_client._with_card(response, "⚡ Jev · BALANCED · 6-luna · medium")
+        self.assertIs(result, response)
+        self.assertIsNone(message.content)
+        self.assertEqual(message.tool_calls, [{"id": "call-1"}])
+
+    def test_empty_stream_does_not_emit_route_label_as_answer(self):
+        chunks = [
+            router_client._chunk("gpt-6-luna", "", role="assistant"),
+            router_client._chunk("gpt-6-luna", "", finish_reason="stop"),
+        ]
+        output = list(router_client._stream_with_card(chunks, "⚡ Jev · BALANCED · 6-luna · medium", SimpleNamespace()))
+        self.assertTrue(all(not chunk.choices[0].delta.content for chunk in output))
+
+    def test_stream_adds_notice_only_when_answer_text_arrives(self):
+        chunks = [
+            router_client._chunk("gpt-6-luna", "", role="assistant"),
+            router_client._chunk("gpt-6-luna", "answer"),
+            router_client._chunk("gpt-6-luna", "", finish_reason="stop"),
+        ]
+        output = list(router_client._stream_with_card(chunks, "⚡ Jev · BALANCED · 6-luna · medium", SimpleNamespace()))
+        self.assertIn("⚡ Jev", output[0].choices[0].delta.content)
+        self.assertIn("answer", output[2].choices[0].delta.content)
+
     def test_native_client_resolves_marker_target_and_strips_marker(self):
         fake = FakeCompletions()
         downstream = SimpleNamespace(chat=SimpleNamespace(completions=fake))

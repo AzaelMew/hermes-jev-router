@@ -196,10 +196,9 @@ def _with_card(response: Any, card: str) -> Any:
     if message is None:
         return response
     content = getattr(message, "content", None)
-    if content:
-        message.content = f"{card}\n\n{content}"
-    else:
-        message.content = card
+    if not content:
+        return response
+    message.content = f"{card}\n\n{content}"
     return response
 
 
@@ -378,9 +377,29 @@ def _close_after(chunks: Iterable[Any], downstream: Any) -> Iterator[Any]:
         _close(downstream)
 
 
+def _stream_chunk_has_text(chunk: Any) -> bool:
+    choices = chunk.get("choices") if isinstance(chunk, dict) else getattr(chunk, "choices", None)
+    if not choices:
+        return False
+    choice = choices[0]
+    delta = choice.get("delta") if isinstance(choice, dict) else getattr(choice, "delta", None)
+    content = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
+    return bool(content)
+
+
 def _stream_with_card(upstream: Iterable[Any], card: str, downstream: Any) -> Iterator[Any]:
     try:
-        yield _chunk("jev-router", card + "\n\n", role="assistant")
+        leading = []
+        for chunk in upstream:
+            if _stream_chunk_has_text(chunk):
+                yield _chunk("jev-router", card + "\n\n", role="assistant")
+                yield from leading
+                yield chunk
+                break
+            leading.append(chunk)
+        else:
+            yield from leading
+            return
         yield from upstream
     finally:
         close = getattr(upstream, "close", None)
