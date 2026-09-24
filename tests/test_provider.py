@@ -63,6 +63,8 @@ class ProviderClientTests(unittest.TestCase):
     def test_route_level_provider_errors_are_failoverable(self):
         self.assertTrue(router_client._should_failover(RuntimeError("HTTP 401: API key is invalid")))
         self.assertTrue(router_client._should_failover(RuntimeError("HTTP 400: model_not_supported")))
+        self.assertTrue(router_client._should_failover(RuntimeError("HTTP 429: The usage limit has been reached")))
+        self.assertTrue(router_client._should_failover(RuntimeError("HTTP 429: Rate limit reached, retry later")))
         self.assertFalse(router_client._should_failover(RuntimeError("HTTP 400: invalid prompt")))
 
     def test_native_client_resolves_marker_target_and_strips_marker(self):

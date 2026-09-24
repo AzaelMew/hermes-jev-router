@@ -180,9 +180,10 @@ def _close(client: Any) -> None:
 def _should_failover(error: Exception) -> bool:
     text = str(error).lower()
     return any(token in text for token in (
-        "401", "402", "403", "404", "authentication_error", "api key is invalid",
+        "401", "402", "403", "404", "429", "authentication_error", "api key is invalid",
         "model_not_available", "model_not_supported", "model is not supported",
         "model not found", "unknown model", "insufficient credit", "quota",
+        "rate limit", "rate_limit", "ratelimit", "too many requests", "usage limit",
         "guardrail", "data policy",
     ))
 
