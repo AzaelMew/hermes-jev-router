@@ -75,23 +75,29 @@ class ProviderClientTests(unittest.TestCase):
         self.assertIsNone(message.content)
         self.assertEqual(message.tool_calls, [{"id": "call-1"}])
 
-    def test_empty_stream_does_not_emit_route_label_as_answer(self):
+    def test_tool_call_response_does_not_get_route_label_as_assistant_text(self):
+        message = SimpleNamespace(role="assistant", content="", tool_calls=[{"id": "call-1"}])
+        response = SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="tool_calls")])
+        result = router_client._with_card(response, "⚡ Jev · BALANCED · 6-luna · medium")
+        self.assertIs(result, response)
+        self.assertEqual(message.content, "")
+
+    def test_empty_stream_passes_through_without_route_label(self):
         chunks = [
             router_client._chunk("gpt-6-luna", "", role="assistant"),
             router_client._chunk("gpt-6-luna", "", finish_reason="stop"),
         ]
-        output = list(router_client._stream_with_card(chunks, "⚡ Jev · BALANCED · 6-luna · medium", SimpleNamespace()))
+        output = list(router_client._stream_without_card(chunks, SimpleNamespace()))
         self.assertTrue(all(not chunk.choices[0].delta.content for chunk in output))
 
-    def test_stream_adds_notice_only_when_answer_text_arrives(self):
+    def test_stream_preserves_answer_without_route_label_injection(self):
         chunks = [
-            router_client._chunk("gpt-6-luna", "", role="assistant"),
-            router_client._chunk("gpt-6-luna", "answer"),
+            router_client._chunk("gpt-6-luna", "answer", role="assistant"),
             router_client._chunk("gpt-6-luna", "", finish_reason="stop"),
         ]
-        output = list(router_client._stream_with_card(chunks, "⚡ Jev · BALANCED · 6-luna · medium", SimpleNamespace()))
-        self.assertIn("⚡ Jev", output[0].choices[0].delta.content)
-        self.assertIn("answer", output[2].choices[0].delta.content)
+        output = list(router_client._stream_without_card(chunks, SimpleNamespace()))
+        self.assertEqual(output[0].choices[0].delta.content, "answer")
+        self.assertNotIn("⚡ Jev", "".join(chunk.choices[0].delta.content or "" for chunk in output))
 
     def test_native_client_resolves_marker_target_and_strips_marker(self):
         fake = FakeCompletions()
@@ -114,7 +120,7 @@ class ProviderClientTests(unittest.TestCase):
         self.assertIn("⚡ Jev · STRONG", response.choices[0].message.content)
         self.assertIn("real answer", response.choices[0].message.content)
 
-    def test_native_client_emits_a_complete_stream_with_route_card(self):
+    def test_native_client_streams_answer_without_injecting_route_label(self):
         fake = FakeCompletions()
         downstream = SimpleNamespace(chat=SimpleNamespace(completions=fake))
         runtime_module = ModuleType("hermes_cli.runtime_provider")
@@ -132,7 +138,8 @@ class ProviderClientTests(unittest.TestCase):
                 model="auto", stream=True, messages=[{"role": "user", "content": marker()}]
             ))
         self.assertGreaterEqual(len(chunks), 3)
-        self.assertIn("⚡ Jev · STRONG", chunks[0].choices[0].delta.content)
+        self.assertNotIn("⚡ Jev", "".join(chunk.choices[0].delta.content or "" for chunk in chunks))
+        self.assertIn("real answer", "".join(chunk.choices[0].delta.content or "" for chunk in chunks))
         self.assertEqual(chunks[-1].choices[0].finish_reason, "stop")
 
     def test_invalid_target_fails_closed(self):

@@ -193,7 +193,7 @@ def _with_card(response: Any, card: str) -> Any:
     if not choices:
         return response
     message = getattr(choices[0], "message", None)
-    if message is None:
+    if message is None or getattr(message, "tool_calls", None):
         return response
     content = getattr(message, "content", None)
     if not content:
@@ -346,7 +346,7 @@ class JevRouterClient:
         stream = bool(request.get("stream"))
         if stream and target["api_mode"] == "chat_completions" and target["supports_streaming"]:
             upstream = downstream.chat.completions.create(**request)
-            return _stream_with_card(upstream, card, downstream)
+            return _stream_without_card(upstream, downstream)
         try:
             if stream:
                 request["stream"] = False
@@ -356,8 +356,7 @@ class JevRouterClient:
                 content = getattr(message, "content", None) if message is not None else ""
                 tool_calls = _tool_call_deltas(message) if message is not None else []
                 output = [
-                    _chunk(target["model"], card + "\n\n", role="assistant"),
-                    _chunk(target["model"], content or "", tool_calls=tool_calls),
+                    _chunk(target["model"], content or "", role="assistant", tool_calls=tool_calls),
                     _chunk(target["model"], "", finish_reason=getattr(choice, "finish_reason", "stop")),
                 ]
                 return _close_after(output, downstream)
@@ -377,29 +376,8 @@ def _close_after(chunks: Iterable[Any], downstream: Any) -> Iterator[Any]:
         _close(downstream)
 
 
-def _stream_chunk_has_text(chunk: Any) -> bool:
-    choices = chunk.get("choices") if isinstance(chunk, dict) else getattr(chunk, "choices", None)
-    if not choices:
-        return False
-    choice = choices[0]
-    delta = choice.get("delta") if isinstance(choice, dict) else getattr(choice, "delta", None)
-    content = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
-    return bool(content)
-
-
-def _stream_with_card(upstream: Iterable[Any], card: str, downstream: Any) -> Iterator[Any]:
+def _stream_without_card(upstream: Iterable[Any], downstream: Any) -> Iterator[Any]:
     try:
-        leading = []
-        for chunk in upstream:
-            if _stream_chunk_has_text(chunk):
-                yield _chunk("jev-router", card + "\n\n", role="assistant")
-                yield from leading
-                yield chunk
-                break
-            leading.append(chunk)
-        else:
-            yield from leading
-            return
         yield from upstream
     finally:
         close = getattr(upstream, "close", None)
